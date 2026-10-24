@@ -67,6 +67,7 @@ export const SYSTEM_ACCOUNTS = [
   { systemKey: 'customer_advance', code: '2100', name: 'Customer Advances', type: 'liability' },
   { systemKey: 'refund_payable', code: '2200', name: 'Refunds Payable', type: 'liability' },
   { systemKey: 'vendor_payable', code: '2300', name: 'Vendor Payables', type: 'liability' },
+  { systemKey: 'broker_payable', code: '2400', name: 'Brokerage Payable', type: 'liability' },
   { systemKey: 'capital', code: '3000', name: "Owner's Capital", type: 'equity' },
   { systemKey: 'plot_sales', code: '4000', name: 'Plot Sales', type: 'income' },
   { systemKey: 'cancellation_income', code: '4100', name: 'Cancellation Charges', type: 'income' },
@@ -83,16 +84,42 @@ export type OverpaymentPolicy = (typeof OVERPAYMENT_POLICIES)[number];
 export const MEMBERSHIP_STATUSES = ['active', 'invited', 'disabled'] as const;
 
 export const LEAD_STATUSES = ['new', 'contacted', 'site_visit', 'negotiation', 'won', 'lost'] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
+export const OPEN_LEAD_STATUSES: LeadStatus[] = ['new', 'contacted', 'site_visit', 'negotiation'];
+export const LEAD_SOURCES = ['walk_in', 'website', 'facebook', 'google', 'broker', 'referral', 'hoarding', 'other'] as const;
+export const LEAD_ACTIVITY_TYPES = ['call', 'whatsapp', 'email', 'meeting', 'site_visit', 'note', 'status_change'] as const;
 export const LAND_STATUSES = ['negotiation', 'agreement', 'registered', 'converted', 'dropped'] as const;
+export type LandStatus = (typeof LAND_STATUSES)[number];
+/** Land acquisition pipeline; `dropped` is terminal and reachable before registry. */
+export const LAND_TRANSITIONS: Record<LandStatus, LandStatus[]> = {
+  negotiation: ['agreement', 'dropped'],
+  agreement: ['registered', 'dropped'],
+  registered: ['converted'],
+  converted: [],
+  dropped: [],
+};
+export const LAND_AREA_UNITS = ['sqft', 'sqm', 'acre', 'bigha', 'hectare'] as const;
 export const WORK_ORDER_STATUSES = ['draft', 'issued', 'in_progress', 'completed', 'cancelled'] as const;
-export const DOCUMENT_ENTITY_TYPES = [
-  'project',
-  'land_parcel',
-  'plot',
-  'customer',
-  'booking',
-  'payment',
-  'vendor',
-  'work_order',
-  'company',
-] as const;
+export type WorkOrderStatus = (typeof WORK_ORDER_STATUSES)[number];
+export const WORK_ORDER_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
+  draft: ['issued', 'cancelled'],
+  issued: ['in_progress', 'cancelled'],
+  in_progress: ['completed', 'cancelled'],
+  completed: [],
+  cancelled: [],
+};
+export const VENDOR_CATEGORIES = ['civil', 'electrical', 'plumbing', 'road', 'landscaping', 'material', 'consultant', 'other'] as const;
+export const COMMISSION_STATUSES = ['accrued', 'paid', 'cancelled'] as const;
+export const EXPENSE_SETTLEMENTS = ['paid', 'payable'] as const;
+export const DOCUMENT_ENTITY_TYPES = ['project', 'land_parcel', 'plot', 'customer', 'booking', 'payment', 'vendor', 'work_order', 'lead', 'company'] as const;
+export type DocumentEntityType = (typeof DOCUMENT_ENTITY_TYPES)[number];
+export const DOCUMENT_CATEGORIES = ['general', 'agreement', 'registry', 'kyc', 'layout_plan', 'approval', 'invoice', 'receipt', 'photo', 'other'] as const;
+/** File types accepted for upload; the server also verifies file signatures (magic bytes). */
+export const ALLOWED_UPLOAD_TYPES: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+};

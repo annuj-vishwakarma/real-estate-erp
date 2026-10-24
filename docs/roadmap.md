@@ -4,15 +4,15 @@
 
 Auth and sessions, tenancy and RBAC, projects and structure, plot inventory, interactive map with editor, customers, payment plans, quotations, reservations, bookings, receipts, reversals, refunds, double-entry accounting and reports, dashboard, notifications job, audit log, search, Excel and PDF output, tests, Docker and CI.
 
-## Phase 2: next modules
+## Phase 2: operations modules (done)
 
-The Mongoose models for these already exist, so the data model is complete. What remains is services, routes and screens.
+1. **Land acquisition** (`landparcels`, `landpayments`): khasra/khata records, owners, agreed cost, negotiation → agreement → registry → conversion (or dropped) with history, mutation flag. Payments to owners post Dr Land & Development (WIP) · Cr Cash/Bank and can never exceed the agreed cost.
+2. **Document management** (`documents`): private storage behind a driver (local disk with HMAC-signed links, or S3-compatible with presigned GETs). Uploads go through the API (multipart) with allow-listed types, a size cap and magic-byte checks; every view or download re-checks access and issues a link valid for 5 minutes. Deletes are soft. Attached to projects, land parcels, customers (KYC), bookings, leads, vendors and work orders.
+3. **CRM** (`leads`, `leadactivities`): board and list views, sources, budget and interest, owner assignment, follow-up dates with an in-app reminder job, activity timeline that advances status, lost reasons, conversion to a customer (deduplicated by phone), and summary stats on the dashboard.
+4. **Construction and vendors** (`vendors`, `workorders`, `expenses`, `vendorpayments`): work orders with milestones and status transitions, vendor bills against an order (Dr expense/WIP · Cr Vendor Payables) capped at the contract value, paid-now expenses, vendor payments capped at the payable balance, bill reversal (refused once paid), and a per-project cost summary.
+5. **Broker commissions** (`brokercommissions`): accrue when a booking is confirmed (Dr Brokerage · Cr Broker Payables, on gross − discount), reverse when an unpaid booking is cancelled, settle with idempotent payouts.
 
-1. **Land acquisition** (`landparcels`): khasra/khata records, owners and shares, agreement → registry → mutation → land-use conversion. Payments to land owners post to Land & Development (WIP). Documents link to the parcel.
-2. **Document management** (`documents`): private S3-compatible storage, presigned PUT uploads with server-side type, size and checksum validation, authorized short-lived GET URLs, and attachments on projects, plots, customers, bookings and payments.
-3. **CRM** (`leads`, `leadactivities`): pipeline board, follow-up reminders, assignment, lead → customer conversion, and source analytics.
-4. **Construction and vendors** (`vendors`, `workorders`, `expenses`): work orders with milestones, vendor bills (Dr expense/WIP, Cr Vendor Payables), payments, project cost reports.
-5. **Broker commissions**: accrue on confirmation (Dr Brokerage, Cr Payables) and settle with payouts.
+Note: uploads go through the API rather than presigned PUTs, so the server can verify the file signature before anything is stored. Revisit if very large files are needed.
 
 ## Phase 3: enhancements
 

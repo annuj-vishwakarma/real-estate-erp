@@ -21,6 +21,7 @@ import { AppError, badRequest, businessRule, forbidden, notFound } from '../../u
 import { escapeRegex, pageMeta, parseSort } from '../../utils/http';
 import { assertProjectAccess, hasPermission, scopedFilter, toObjectId, type TenantContext } from '../../utils/tenant';
 import { postJournal, reverseJournal } from '../accounting/ledger.service';
+import { accrueCommission, cancelCommission } from '../brokers/brokers.service';
 import { Company } from '../companies/company.model';
 import { Broker, Customer } from '../customers/customer.models';
 import { assertCustomerVisible } from '../customers/customers.service';
@@ -268,6 +269,7 @@ export async function createBooking(ctx: TenantContext, input: CreateBookingInpu
         },
         session,
       );
+      if (status === 'booked') await accrueCommission(ctx, bookingId, session);
       return booking!.toJSON();
     });
   } catch (err) {
@@ -407,6 +409,7 @@ export async function confirmBooking(ctx: TenantContext, id: string) {
       );
     }
     await audit(ctx, { action: 'bookings.confirm', entityType: 'booking', entityId: booking._id, summary: booking.bookingNumber }, session);
+    await accrueCommission(ctx, booking._id, session);
     return { id: String(booking._id), status: 'booked' as const };
   });
 }
@@ -482,6 +485,7 @@ export async function closeBooking(
   );
 
   await Installment.updateMany({ companyId: actor.companyId, bookingId: booking._id }, { $set: { status: 'cancelled' } }, { session });
+  await cancelCommission(actor, booking._id, `Booking ${booking.bookingNumber} ${to}`, session);
 
   const items = await BookingItem.find({ companyId: actor.companyId, bookingId: booking._id, active: true }).session(session).lean();
   await BookingItem.updateMany(

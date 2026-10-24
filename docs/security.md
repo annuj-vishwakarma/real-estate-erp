@@ -15,7 +15,9 @@
 | Financial integrity | Integer paise, transactions, idempotency keys, optimistic guards, immutable journal entries, reversal-only corrections |
 | PII minimisation | Only the last 4 digits of Aadhaar are stored. PAN is format-validated |
 | Audit | Append-only audit log for auth events, bookings, payments, reversals, refunds, role and permission changes, membership changes and inventory status changes. Each record carries the actor, IP, user agent and request ID |
-| Documents (Phase 2) | Metadata stores only the private storage key (`select:false`). Downloads will go through authorized, short-lived signed URLs |
+| File uploads | Multipart through the API (memory buffer, `MAX_UPLOAD_MB` cap → 413). Only PDF, PNG, JPEG, WebP, DOCX and XLSX are accepted, and the file's **magic bytes** must match the declared type. Storage keys are server-generated (`companyId/entity/random`), never derived from the filename. The local driver rejects path traversal |
+| File downloads | Files are never public. `GET /documents/:id/url` re-checks tenant, permission and project/lead visibility, audits the access and returns a link valid for `FILE_URL_TTL_SECONDS` (default 300). Local links are HMAC-SHA256 tokens bound to the key, filename, type, disposition and expiry; S3 links are presigned GETs. The file route sends `nosniff`, a `sandbox` CSP, `no-store` and an RFC 6266 `Content-Disposition`. The storage key is `select:false` and never reaches the client |
+| Ledger control accounts | Receivables, advances, refunds, vendor and broker payables can only be posted by their workflows. Manual vouchers are refused, so party balances always match their sub-ledgers |
 
 ## Production checklist
 
@@ -23,6 +25,7 @@
 - [ ] Serve over HTTPS on one origin (SPA plus `/api` reverse proxy), or adjust `CORS_ORIGINS` and the cookie settings deliberately.
 - [ ] Set `TRUST_PROXY` to the number of proxies in front of the API so rate limiting sees real client IPs.
 - [ ] Configure `SMTP_URL` for verification, reset and invitation emails.
+- [ ] Use `STORAGE_DRIVER=s3` with a private bucket (block public access, SSE on, least-privilege keys limited to that bucket), or mount a backed-up volume for the local driver on a single server.
 - [ ] Use MongoDB with authentication, TLS, a least-privilege application user and backups. Run `syncIndexes` during deploy, since `autoIndex` is off in production.
 - [ ] Disable or delete the seed users. The API will not start otherwise.
 - [ ] Ship logs (pino JSON) to your log platform and alert on 5xx responses and `auth.refresh_reuse_detected` audit events.

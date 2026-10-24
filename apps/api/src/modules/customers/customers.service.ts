@@ -7,7 +7,7 @@ import { escapeRegex, pageMeta, parseSort } from '../../utils/http';
 import { toObjectId, type TenantContext } from '../../utils/tenant';
 import { Booking } from '../bookings/booking.models';
 import { JournalEntry } from '../accounting/accounting.models';
-import { Broker, Customer } from './customer.models';
+import { Customer } from './customer.models';
 
 function normalize(input: Partial<CustomerInput>) {
   const { dateOfBirth, ...rest } = input;
@@ -150,17 +150,4 @@ export async function customerLedger(ctx: TenantContext, id: string) {
       balancePaise: balance,
     },
   };
-}
-
-export async function listBrokers(ctx: TenantContext) {
-  return Broker.find({ companyId: ctx.companyId, isActive: true }).sort({ name: 1 }).lean();
-}
-
-export async function createBroker(
-  ctx: TenantContext,
-  input: { name: string; phone: string; email?: string; firmName?: string; commissionBp?: number },
-) {
-  const broker = await Broker.create({ companyId: ctx.companyId, ...input });
-  await audit(ctx, { action: 'brokers.create', entityType: 'broker', entityId: broker._id, summary: broker.name });
-  return broker.toJSON();
 }

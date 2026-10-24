@@ -18,6 +18,7 @@ import { DescriptionList, Field, PageHeader, StatCard, StatusBadge } from '@/com
 import { EmptyState, ErrorState, PageSkeleton } from '@/components/states';
 import { SearchInput } from '@/components/search-input';
 import { MoneyInput, toPaise } from '@/components/money';
+import { DocumentsPanel } from '@/components/documents-panel';
 import type { Customer } from '@/features/customers/customers-pages';
 import { CustomerFormSheet } from '@/features/customers/customers-pages';
 import type { PaymentPlan } from './payment-plans-page';
@@ -173,6 +174,12 @@ export function NewBookingPage() {
   const [discount, setDiscount] = React.useState('');
   const [charges, setCharges] = React.useState<{ name: string; amount: string }[]>([]);
   const [remarks, setRemarks] = React.useState('');
+  const [brokerId, setBrokerId] = React.useState('');
+  const brokers = useQuery({
+    queryKey: ['brokers', 'options'],
+    queryFn: () => api.get<{ id: string; name: string; commissionBp: number }[]>('/brokers'),
+    enabled: can('brokers.read'),
+  });
   const idempotencyKey = React.useRef(newIdempotencyKey());
 
   const preCustomer = params.get('customer');
@@ -246,6 +253,7 @@ export function NewBookingPage() {
           discountPaise,
           charges: chargeRows,
           remarks: remarks || undefined,
+          brokerId: brokerId || undefined,
         },
         idempotencyKey.current,
       ),
@@ -497,6 +505,18 @@ export function NewBookingPage() {
                   </div>
                 ))}
               </div>
+              {can('brokers.read') && (
+                <Field label="Broker" htmlFor="nb-broker" hint="Commission accrues when the booking is confirmed">
+                  <Select value={brokerId} onChange={(e) => setBrokerId(e.target.value)}>
+                    <option value="">Direct (no broker)</option>
+                    {brokers.data?.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} · {b.commissionBp / 100}%
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
               <Field label="Remarks" htmlFor="nb-remarks" className="sm:col-span-2">
                 <Textarea rows={2} value={remarks} onChange={(e) => setRemarks(e.target.value)} />
               </Field>
@@ -950,6 +970,9 @@ export function BookingDetailPage() {
           )}
         </CardContent>
       </Card>
+      <div className="mt-6">
+        <DocumentsPanel entityType="booking" entityId={b.id} title="Agreements & booking documents" />
+      </div>
 
       {active && (
         <RecordPaymentDialog

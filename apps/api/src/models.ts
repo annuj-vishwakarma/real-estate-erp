@@ -17,3 +17,4 @@ export * from './modules/construction/construction.models';
 export * from './modules/documents/document.model';
 export * from './modules/notifications/notification.model';
 export * from './modules/audit/audit.model';
+export * from './modules/brokers/commission.model';

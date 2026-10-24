@@ -1,10 +1,13 @@
 import type { Types } from 'mongoose';
-import { addDays, addMonths, financialYear, parseISODate, todayInIndia } from '@erp/shared';
+import { addDays, addMonths, financialYear, OPEN_LEAD_STATUSES, parseISODate, todayInIndia } from '@erp/shared';
 import { hasPermission, scopedFilter, type TenantContext } from '../../utils/tenant';
 import { Account, JournalEntry } from '../accounting/accounting.models';
 import { Booking, Installment } from '../bookings/booking.models';
 import { Payment } from '../payments/payment.models';
 import { Plot } from '../plots/plot.models';
+import { WorkOrder } from '../construction/construction.models';
+import { Lead } from '../crm/crm.models';
+import { LandParcel } from '../land/land.model';
 
 function monthStart(iso: string) {
   return `${iso.slice(0, 7)}-01`;
@@ -147,6 +150,43 @@ export async function getDashboard(ctx: TenantContext, projectId?: string) {
       trend: months.map((m) => ({ month: m, valuePaise: map.get(m) ?? 0 })),
     };
   }
+
+  const ops: Record<string, unknown> = {};
+  if (hasPermission(ctx, 'crm.read')) {
+    const leadMatch: Record<string, unknown> = { companyId: ctx.companyId, deletedAt: null };
+    if (base.projectId) leadMatch.projectId = base.projectId;
+    if (ctx.projectScope !== null && !base.projectId) leadMatch.$or = [{ projectId: { $in: ctx.projectScope } }, { assignedTo: ctx.userId }];
+    const [open, due, won] = await Promise.all([
+      Lead.countDocuments({ ...leadMatch, status: { $in: OPEN_LEAD_STATUSES } }),
+      Lead.countDocuments({ ...leadMatch, status: { $in: OPEN_LEAD_STATUSES }, nextFollowUpAt: { $lte: new Date() } }),
+      Lead.countDocuments({ ...leadMatch, status: 'won', convertedAt: { $gte: thisMonth } }),
+    ]);
+    ops.leads = { open, followUpsDue: due, wonThisMonth: won };
+  }
+  if (hasPermission(ctx, 'land.read')) {
+    const landMatch: Record<string, unknown> = { companyId: ctx.companyId, deletedAt: null, status: { $ne: 'dropped' } };
+    if (base.projectId) landMatch.projectId = base.projectId;
+    const l = await LandParcel.aggregate<{ agreed: number; paid: number; n: number }>([
+      { $match: landMatch },
+      { $group: { _id: null, agreed: { $sum: { $ifNull: ['$agreedCostPaise', 0] } }, paid: { $sum: '$paidPaise' }, n: { $sum: 1 } } },
+    ]);
+    ops.land = { parcels: l[0]?.n ?? 0, agreedCostPaise: l[0]?.agreed ?? 0, paidPaise: l[0]?.paid ?? 0 };
+  }
+  if (hasPermission(ctx, 'construction.read')) {
+    const w = await WorkOrder.aggregate<{ committed: number; billed: number; open: number }>([
+      { $match: { ...base, status: { $in: ['issued', 'in_progress', 'completed'] } } },
+      {
+        $group: {
+          _id: null,
+          committed: { $sum: '$amountPaise' },
+          billed: { $sum: '$billedPaise' },
+          open: { $sum: { $cond: [{ $in: ['$status', ['issued', 'in_progress']] }, 1, 0] } },
+        },
+      },
+    ]);
+    ops.construction = { openWorkOrders: w[0]?.open ?? 0, committedPaise: w[0]?.committed ?? 0, billedPaise: w[0]?.billed ?? 0 };
+  }
+  if (Object.keys(ops).length) result.operations = ops;
 
   return result;
 }

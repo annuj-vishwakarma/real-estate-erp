@@ -9,6 +9,9 @@ import { Booking } from '../bookings/booking.models';
 import { Customer } from '../customers/customer.models';
 import { Plot } from '../plots/plot.models';
 import { Project } from '../projects/project.models';
+import { Vendor } from '../construction/construction.models';
+import { Lead } from '../crm/crm.models';
+import { LandParcel } from '../land/land.model';
 import { getDashboard } from './dashboard.service';
 
 export const reportsRouter = Router();
@@ -25,7 +28,7 @@ reportsRouter.get('/search', validate({ query: z.object({ q: z.string().trim().m
   const ctx = getCtx(req);
   const rx = new RegExp(escapeRegex(query<{ q: string }>(req).q), 'i');
   const scoped = scopedFilter(ctx);
-  const [projects, plots, customers, bookings] = await Promise.all([
+  const [projects, plots, customers, bookings, leads, vendors, land] = await Promise.all([
     hasPermission(ctx, 'projects.read')
       ? Project.find({ ...scopedFilter(ctx, undefined, '_id'), $or: [{ name: rx }, { code: rx }] })
           .select('name code')
@@ -50,6 +53,31 @@ reportsRouter.get('/search', validate({ query: z.object({ q: z.string().trim().m
           .limit(5)
           .lean()
       : [],
+    hasPermission(ctx, 'crm.read')
+      ? Lead.find({
+          companyId: ctx.companyId,
+          deletedAt: null,
+          $and: [
+            { $or: [{ name: rx }, { phone: rx }] },
+            ctx.projectScope === null ? {} : { $or: [{ projectId: { $in: ctx.projectScope } }, { assignedTo: ctx.userId }, { createdBy: ctx.userId }] },
+          ],
+        })
+          .select('name phone status')
+          .limit(5)
+          .lean()
+      : [],
+    hasPermission(ctx, 'vendors.read') ? Vendor.find({ companyId: ctx.companyId, name: rx }).select('name category').limit(5).lean() : [],
+    hasPermission(ctx, 'land.read')
+      ? LandParcel.find({
+          companyId: ctx.companyId,
+          deletedAt: null,
+          ...(ctx.projectScope === null ? {} : { projectId: { $in: ctx.projectScope } }),
+          $or: [{ khasraNumber: rx }, { village: rx }, { 'owners.name': rx }],
+        })
+          .select('khasraNumber village status')
+          .limit(5)
+          .lean()
+      : [],
   ]);
-  ok(res, { projects, plots, customers, bookings });
+  ok(res, { projects, plots, customers, bookings, leads, vendors, land });
 });

@@ -44,7 +44,15 @@ describe('DataTable', () => {
 
   it('pages forward', async () => {
     const onPage = vi.fn();
-    render(<DataTable columns={columns} rows={[{ id: '1', name: 'x', amount: 1 }]} rowKey={(r) => r.id} meta={{ page: 1, pageSize: 1, total: 2, totalPages: 2 }} onPageChange={onPage} />);
+    render(
+      <DataTable
+        columns={columns}
+        rows={[{ id: '1', name: 'x', amount: 1 }]}
+        rowKey={(r) => r.id}
+        meta={{ page: 1, pageSize: 1, total: 2, totalPages: 2 }}
+        onPageChange={onPage}
+      />,
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
     expect(onPage).toHaveBeenCalledWith(2);
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();

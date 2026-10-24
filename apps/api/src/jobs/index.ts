@@ -4,6 +4,7 @@ import { addDays, formatDate, formatINR, parseISODate, todayInIndia } from '@erp
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { expireReservations } from '../modules/bookings/bookings.service';
+import { runFollowUpReminders } from '../modules/crm/crm.service';
 import { Booking, Installment } from '../modules/bookings/booking.models';
 import { Notification } from '../modules/notifications/notification.model';
 import { Membership } from '../modules/users/user.models';
@@ -90,6 +91,14 @@ export function startJobs(): void {
         if (n) logger.info({ expired: n }, 'Expired reservations');
       } catch (err) {
         logger.error({ err }, 'Reservation expiry job failed');
+      }
+    }),
+    cron.schedule(env.FOLLOWUP_REMINDER_CRON, async () => {
+      try {
+        const n = await runFollowUpReminders();
+        if (n) logger.info({ created: n }, 'Lead follow-up reminders created');
+      } catch (err) {
+        logger.error({ err }, 'Follow-up reminder job failed');
       }
     }),
     cron.schedule(env.INSTALLMENT_REMINDER_CRON, async () => {

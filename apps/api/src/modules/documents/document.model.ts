@@ -1,9 +1,9 @@
 import { model, Schema } from 'mongoose';
-import { DOCUMENT_ENTITY_TYPES } from '@erp/shared';
+import { DOCUMENT_CATEGORIES, DOCUMENT_ENTITY_TYPES } from '@erp/shared';
 import { baseOptions, tenantRef, withTenant } from '../../db/base';
 
 /**
- * Document metadata (Phase 2 upload flow). Only the private object-storage key is stored;
+ * Document metadata. Only the private object-storage key is stored (never a public URL);
  * downloads always go through an authorized endpoint that issues a short-lived signed URL.
  */
 const documentSchema = withTenant(
@@ -13,7 +13,8 @@ const documentSchema = withTenant(
       projectId: { type: Schema.Types.ObjectId, ref: 'Project' },
       entityType: { type: String, enum: DOCUMENT_ENTITY_TYPES, required: true },
       entityId: { type: Schema.Types.ObjectId, required: true },
-      category: { type: String, default: 'general' },
+      category: { type: String, enum: DOCUMENT_CATEGORIES, default: 'general' },
+      description: String,
       fileName: { type: String, required: true },
       mimeType: { type: String, required: true },
       sizeBytes: { type: Number, required: true, min: 1 },
@@ -21,6 +22,7 @@ const documentSchema = withTenant(
       checksumSha256: String,
       uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
       deletedAt: Date,
+      deletedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     },
     baseOptions,
   ),

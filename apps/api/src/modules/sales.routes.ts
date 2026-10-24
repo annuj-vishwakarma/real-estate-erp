@@ -43,7 +43,7 @@ import { allotmentLetterPdf, exportBookings, exportPayments, receiptPdf } from '
 type Id = { id: string };
 const projectQuery = z.object({ projectId: objectId.optional() });
 
-// ---------------- Customers & brokers ----------------
+// ---------------- Customers ----------------
 export const customersRouter = Router();
 customersRouter.get('/', authorize('customers.read'), validate({ query: listQuerySchema }), async (req, res) => {
   const { items, meta } = await customers.listCustomers(getCtx(req), query<ListQuery>(req));
@@ -64,19 +64,6 @@ customersRouter.delete('/:id', authorize('customers.delete'), validate({ params:
 });
 customersRouter.get('/:id/ledger', authorize('customers.read', 'payments.read'), validate({ params: idParam }), async (req, res) =>
   ok(res, await customers.customerLedger(getCtx(req), params<Id>(req).id)),
-);
-
-export const brokersRouter = Router();
-const brokerSchema = z.object({
-  name: requiredText('Name', 120),
-  phone,
-  email: optional(email),
-  firmName: trimmed(120).optional(),
-  commissionBp: z.number().int().min(0).max(10_000).default(0),
-});
-brokersRouter.get('/', authorize('brokers.read'), async (req, res) => ok(res, await customers.listBrokers(getCtx(req))));
-brokersRouter.post('/', authorize('brokers.create'), validate({ body: brokerSchema }), async (req, res) =>
-  created(res, await customers.createBroker(getCtx(req), body(req))),
 );
 
 // ---------------- Payment plans ----------------

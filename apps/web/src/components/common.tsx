@@ -86,7 +86,7 @@ const GENERIC_VARIANT: Record<string, BadgeVariant> = {
   overdue: 'destructive',
 };
 
-export function StatusBadge({ status, kind }: { status: string; kind?: 'plot' | 'booking' }) {
+export function StatusBadge({ status, kind, label }: { status: string; kind?: 'plot' | 'booking'; label?: string }) {
   if (kind === 'plot' && status in PLOT_STATUS_META) {
     const m = PLOT_STATUS_META[status as PlotStatus];
     return (
@@ -97,7 +97,7 @@ export function StatusBadge({ status, kind }: { status: string; kind?: 'plot' | 
     );
   }
   const variant = kind === 'booking' ? BOOKING_VARIANT[status as BookingStatus] : GENERIC_VARIANT[status];
-  return <Badge variant={variant ?? 'secondary'}>{titleCase(status)}</Badge>;
+  return <Badge variant={variant ?? 'secondary'}>{label ?? titleCase(status)}</Badge>;
 }
 
 export function StatCard({

@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import type { AcceptInviteInput, AuthContext, RegisterInput } from '@erp/shared';
+import { ALL_PERMISSIONS, type AcceptInviteInput, type AuthContext, type RegisterInput } from '@erp/shared';
 import { env } from '../../config/env';
 import { withTransaction } from '../../db/transaction';
 import { audit } from '../../utils/audit';
@@ -223,7 +223,7 @@ export async function getAuthContext(userId: string, activeCompanyId?: string): 
     .select('name')
     .lean();
   const roles = await Role.find({ _id: { $in: memberships.map((m) => m.roleId) } }, null, { crossTenant: true })
-    .select('name permissions')
+    .select('name permissions systemKey')
     .lean();
 
   const summaries = memberships
@@ -244,7 +244,7 @@ export async function getAuthContext(userId: string, activeCompanyId?: string): 
           id: active.id,
           name: active.name,
           roleName: active.roleName,
-          permissions: active.role.permissions,
+          permissions: active.role.systemKey === 'owner' ? ALL_PERMISSIONS : active.role.permissions,
           projectAccess: {
             mode: active.membership.projectAccess?.mode === 'restricted' ? 'restricted' : 'all',
             projectIds: (active.membership.projectAccess?.projectIds ?? []).map(String),

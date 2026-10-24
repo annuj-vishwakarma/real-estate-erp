@@ -19,6 +19,18 @@ const schema = z.object({
   SMTP_URL: z.string().optional(),
   MAIL_FROM: z.string().default('Real Estate ERP <no-reply@example.com>'),
   JOBS_ENABLED: bool.default(true),
+  FOLLOWUP_REMINDER_CRON: z.string().default('*/30 * * * *'),
+  /** `local` (dev/single server) or `s3` (any S3-compatible private bucket). */
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  STORAGE_LOCAL_DIR: z.string().default('.data/uploads'),
+  S3_BUCKET: z.string().optional(),
+  S3_REGION: z.string().default('ap-south-1'),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_FORCE_PATH_STYLE: bool.default(false),
+  MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(100).default(15),
+  FILE_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
   RESERVATION_EXPIRY_CRON: z.string().default('*/5 * * * *'),
   INSTALLMENT_REMINDER_CRON: z.string().default('30 3 * * *'), // 09:00 IST
   REMINDER_DAYS_AHEAD: z.coerce.number().int().min(0).max(60).default(7),
@@ -29,13 +41,16 @@ const schema = z.object({
 export type Env = z.infer<typeof schema> & { isProd: boolean; isTest: boolean; cookieSecure: boolean; corsOrigins: string[] };
 
 function load(): Env {
-  const parsed = schema.safeParse(process.env);
+  // Treat blank values (e.g. `S3_ENDPOINT=` or `${VAR:-}` in compose) as unset.
+  const raw = Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== ''));
+  const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
   const e = parsed.data;
   const isProd = e.NODE_ENV === 'production';
+  if (e.STORAGE_DRIVER === 's3' && !e.S3_BUCKET) throw new Error('S3_BUCKET is required when STORAGE_DRIVER=s3');
   if (isProd && /change-me|dev-only/i.test(e.JWT_ACCESS_SECRET)) {
     throw new Error('Refusing to start in production with a placeholder JWT secret');
   }

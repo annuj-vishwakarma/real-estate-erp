@@ -87,14 +87,15 @@ function buildUrl(path: string, query?: RequestOptions['query']) {
 
 async function rawRequest(path: string, opts: RequestOptions, retry = true): Promise<Response> {
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  const isForm = typeof FormData !== 'undefined' && opts.body instanceof FormData;
+  if (opts.body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
   if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
 
   const res = await fetch(buildUrl(path, opts.query), {
     method: opts.method ?? 'GET',
     headers,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    body: opts.body === undefined ? undefined : isForm ? (opts.body as FormData) : JSON.stringify(opts.body),
     credentials: 'include',
     signal: opts.signal,
   });
@@ -139,6 +140,8 @@ export const api = {
   patch: <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body }),
   put: <T>(path: string, body: unknown) => request<T>(path, { method: 'PUT', body }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  /** Multipart upload (FormData); the browser sets the boundary header. */
+  upload: <T>(path: string, form: FormData) => request<T>(path, { method: 'POST', body: form }),
 };
 
 /** Downloads (PDF/Excel) go through the authenticated client, then open/save as a blob. */

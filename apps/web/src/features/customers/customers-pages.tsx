@@ -28,6 +28,7 @@ import { DataTable, type Column } from '@/components/data-table';
 import { DescriptionList, Field, PageHeader, StatusBadge } from '@/components/common';
 import { EmptyState, ErrorState, PageSkeleton } from '@/components/states';
 import { SearchInput } from '@/components/search-input';
+import { DocumentsPanel } from '@/components/documents-panel';
 
 export interface Customer {
   id: string;
@@ -430,6 +431,7 @@ export function CustomerDetailPage() {
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="bookings">Bookings ({c.bookings?.length ?? 0})</TabsTrigger>
           {can('payments.read') && <TabsTrigger value="ledger">Ledger</TabsTrigger>}
+          <TabsTrigger value="documents">KYC & documents</TabsTrigger>
         </TabsList>
         <TabsContent value="profile">
           <div className="grid gap-4 lg:grid-cols-3">
@@ -508,6 +510,9 @@ export function CustomerDetailPage() {
             <CustomerLedger customerId={c.id} />
           </TabsContent>
         )}
+        <TabsContent value="documents">
+          <DocumentsPanel entityType="customer" entityId={c.id} title="KYC & documents" />
+        </TabsContent>
       </Tabs>
       <CustomerFormSheet open={editing} onOpenChange={setEditing} customer={c} />
     </>

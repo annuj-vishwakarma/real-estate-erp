@@ -1,11 +1,14 @@
 import { Types, type ClientSession } from 'mongoose';
-import { financialYear, parseISODate, toISODate, type SystemAccountKey, type VoucherType } from '@erp/shared';
+import { financialYear, parseISODate, SYSTEM_ACCOUNTS, toISODate, type SystemAccountKey, type VoucherType } from '@erp/shared';
 import { nextSequence } from '../../db/system.models';
 import { businessRule, notFound } from '../../utils/errors';
 import { Account, JournalEntry } from './accounting.models';
 
-/** Control accounts are maintained only by sub-ledger workflows (bookings/payments). */
-export const CONTROL_ACCOUNT_KEYS: SystemAccountKey[] = ['customer_receivable', 'customer_advance', 'refund_payable'];
+/**
+ * Control accounts are maintained only by sub-ledger workflows (bookings, receipts, vendor
+ * bills, broker commissions), so party ledgers always reconcile with the books.
+ */
+export const CONTROL_ACCOUNT_KEYS: SystemAccountKey[] = ['customer_receivable', 'customer_advance', 'refund_payable', 'vendor_payable', 'broker_payable'];
 
 const VOUCHER_PREFIX: Record<VoucherType, string> = {
   journal: 'JV',
@@ -24,6 +27,8 @@ export interface PostingLine {
   narration?: string;
   customerId?: Types.ObjectId;
   bookingId?: Types.ObjectId;
+  vendorId?: Types.ObjectId;
+  brokerId?: Types.ObjectId;
 }
 
 export interface PostingInput {
@@ -48,8 +53,16 @@ export async function systemAccountId(companyId: Types.ObjectId, key: SystemAcco
     .session(session ?? null)
     .select('_id')
     .lean();
-  if (!acc) throw new Error(`System account ${key} is missing for company ${companyId}`);
-  return acc._id;
+  if (acc) return acc._id;
+  // Companies created before a system account was introduced get it on first use.
+  const def = SYSTEM_ACCOUNTS.find((a) => a.systemKey === key);
+  if (!def) throw new Error(`Unknown system account ${key}`);
+  const codeTaken = await Account.exists({ companyId, code: def.code }).session(session ?? null);
+  const [created] = await Account.create(
+    [{ companyId, systemKey: def.systemKey, code: codeTaken ? `${def.code}-S` : def.code, name: def.name, type: def.type }],
+    { session },
+  );
+  return created!._id;
 }
 
 /**
@@ -75,6 +88,8 @@ export async function postJournal(actor: Actor, input: PostingInput, session: Cl
       narration: l.narration,
       customerId: l.customerId,
       bookingId: l.bookingId,
+      vendorId: l.vendorId,
+      brokerId: l.brokerId,
     });
   }
 
@@ -144,6 +159,8 @@ export async function reverseJournal(actor: Actor, entryId: Types.ObjectId, reas
         narration: l.narration ?? undefined,
         customerId: l.customerId ?? undefined,
         bookingId: l.bookingId ?? undefined,
+        vendorId: l.vendorId ?? undefined,
+        brokerId: l.brokerId ?? undefined,
       })),
       source: { type: original.source?.type ?? 'manual', id: original.source?.id ?? undefined },
       reversalOf: original._id,
@@ -160,4 +177,47 @@ export async function reverseJournal(actor: Actor, entryId: Types.ObjectId, reas
   );
   if (linked.modifiedCount !== 1) throw businessRule('This entry has already been reversed');
   return reversal;
+}
+
+/**
+ * Cash/bank account for money in or out: an explicit active cash/bank asset account, or the
+ * system Cash (mode = cash) / Bank account.
+ */
+export async function resolveCashAccountFor(companyId: Types.ObjectId, accountId: string | undefined, mode: string, session: ClientSession) {
+  if (accountId) {
+    if (!Types.ObjectId.isValid(accountId)) throw businessRule('Choose an active cash or bank account');
+    const acc = await Account.findOne({ companyId, _id: new Types.ObjectId(accountId), type: 'asset', isActive: true }).session(session).lean();
+    const isCashLike = acc && (acc.systemKey === 'cash' || acc.systemKey === 'bank' || acc.isBank || !acc.systemKey);
+    if (!isCashLike) throw businessRule('Choose an active cash or bank account');
+    return acc._id;
+  }
+  return systemAccountId(companyId, mode === 'cash' ? 'cash' : 'bank', session);
+}
+
+/** Party balance on a control account from tagged journal lines (credit − debit for liabilities). */
+export async function partyBalance(
+  companyId: Types.ObjectId,
+  party: { vendorId?: Types.ObjectId; brokerId?: Types.ObjectId; customerId?: Types.ObjectId },
+  accountKey: SystemAccountKey,
+  session?: ClientSession,
+): Promise<number> {
+  const accountId = await systemAccountId(companyId, accountKey, session);
+  const [field, value] = Object.entries(party).find(([, v]) => v)!;
+  const rows = await JournalEntry.aggregate<{ debit: number; credit: number }>(
+    [
+      { $match: { companyId, [`lines.${field}`]: value } },
+      { $unwind: '$lines' },
+      { $match: { 'lines.accountId': accountId, [`lines.${field}`]: value } },
+      { $group: { _id: null, debit: { $sum: '$lines.debitPaise' }, credit: { $sum: '$lines.creditPaise' } } },
+    ],
+    { session },
+  );
+  return (rows[0]?.credit ?? 0) - (rows[0]?.debit ?? 0);
+}
+
+/** "PV/2026-27/000123"-style number for a document series, allocated inside the transaction. */
+export async function nextDocumentNumber(companyId: Types.ObjectId, series: string, date: string, session: ClientSession) {
+  const fy = financialYear(date);
+  const seq = await nextSequence(companyId, `${series.toLowerCase()}:${fy}`, session);
+  return `${series}/${fy}/${String(seq).padStart(6, '0')}`;
 }

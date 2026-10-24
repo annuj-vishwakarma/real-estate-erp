@@ -14,7 +14,12 @@ import { adminRouter } from './modules/admin.routes';
 import { authRouter } from './modules/auth/auth.routes';
 import { projectsRouter } from './modules/projects/projects.routes';
 import { reportsRouter } from './modules/reports/reports.routes';
-import { bookingsRouter, brokersRouter, customersRouter, paymentsRouter, plansRouter } from './modules/sales.routes';
+import { bookingsRouter, customersRouter, paymentsRouter, plansRouter } from './modules/sales.routes';
+import { brokersRouter } from './modules/brokers/brokers.routes';
+import { expensesRouter, vendorsRouter, workOrdersRouter } from './modules/construction/construction.routes';
+import { crmRouter } from './modules/crm/crm.routes';
+import { documentsRouter, filesRouter } from './modules/documents/documents.routes';
+import { landRouter } from './modules/land/land.routes';
 import { logger } from './utils/logger';
 
 export function createApp() {
@@ -40,7 +45,7 @@ export function createApp() {
     cors({
       origin: (origin, cb) => cb(null, !origin || env.corsOrigins.includes(origin)),
       credentials: true,
-      exposedHeaders: ['x-request-id', 'idempotent-replayed', 'content-disposition'],
+      exposedHeaders: ['x-request-id', 'idempotent-replayed', 'content-disposition', 'x-total-amount'],
     }),
   );
   app.use(express.json({ limit: '1mb' }));
@@ -54,6 +59,8 @@ export function createApp() {
   const v1 = Router();
   v1.use(apiLimiter);
   v1.use('/auth', authRouter);
+  // Signed, expiring file links (local storage driver); the token itself is the authorization.
+  v1.use('/files', filesRouter);
 
   // Everything below requires an authenticated session and a verified tenant context.
   const tenantScoped = Router();
@@ -61,6 +68,12 @@ export function createApp() {
   tenantScoped.use('/projects', projectsRouter);
   tenantScoped.use('/customers', customersRouter);
   tenantScoped.use('/brokers', brokersRouter);
+  tenantScoped.use('/land', landRouter);
+  tenantScoped.use('/leads', crmRouter);
+  tenantScoped.use('/vendors', vendorsRouter);
+  tenantScoped.use('/work-orders', workOrdersRouter);
+  tenantScoped.use('/expenses', expensesRouter);
+  tenantScoped.use('/documents', documentsRouter);
   tenantScoped.use('/payment-plans', plansRouter);
   tenantScoped.use('/bookings', bookingsRouter);
   tenantScoped.use('/payments', paymentsRouter);

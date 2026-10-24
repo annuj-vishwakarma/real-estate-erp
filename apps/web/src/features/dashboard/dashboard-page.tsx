@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Grid3x3, IndianRupee, ReceiptIndianRupee, TrendingUp, Wallet } from 'lucide-react';
+import { AlertTriangle, Grid3x3, HardHat, IndianRupee, MapPinned, ReceiptIndianRupee, Target, TrendingUp, Wallet } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -67,6 +67,11 @@ interface Dashboard {
     }[];
   };
   expenses?: { monthPaise: number; trend: { month: string; valuePaise: number }[] };
+  operations?: {
+    leads?: { open: number; followUpsDue: number; wonThisMonth: number };
+    land?: { parcels: number; agreedCostPaise: number; paidPaise: number };
+    construction?: { openWorkOrders: number; committedPaise: number; billedPaise: number };
+  };
 }
 
 const axisRupees = (v: number) => formatINRCompact(v).replace('₹', '');
@@ -172,6 +177,43 @@ export function DashboardPage() {
           />
         )}
       </div>
+
+      {d.operations && (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {d.operations.leads && (
+            <Link to="/crm?view=list&followUp=due" className="rounded-xl focus-visible:outline-2 focus-visible:outline-ring">
+              <StatCard
+                label="Leads"
+                value={`${d.operations.leads.open} open`}
+                hint={`${d.operations.leads.followUpsDue} follow-ups due · ${d.operations.leads.wonThisMonth} won this month`}
+                icon={Target}
+                tone={d.operations.leads.followUpsDue ? 'danger' : 'default'}
+              />
+            </Link>
+          )}
+          {d.operations.land && (
+            <Link to="/land" className="rounded-xl focus-visible:outline-2 focus-visible:outline-ring">
+              <StatCard
+                label="Land acquisition"
+                value={formatINRCompact(d.operations.land.paidPaise)}
+                hint={`paid of ${formatINRCompact(d.operations.land.agreedCostPaise)} agreed · ${d.operations.land.parcels} parcels`}
+                icon={MapPinned}
+              />
+            </Link>
+          )}
+          {d.operations.construction && (
+            <Link to="/work-orders" className="rounded-xl focus-visible:outline-2 focus-visible:outline-ring">
+              <StatCard
+                label="Development works"
+                value={formatINRCompact(d.operations.construction.billedPaise)}
+                hint={`billed of ${formatINRCompact(d.operations.construction.committedPaise)} committed · ${d.operations.construction.openWorkOrders} open orders`}
+                icon={HardHat}
+                tone="warning"
+              />
+            </Link>
+          )}
+        </div>
+      )}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">

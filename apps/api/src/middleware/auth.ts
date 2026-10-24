@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { Types } from 'mongoose';
-import type { Permission } from '@erp/shared';
+import { ALL_PERMISSIONS, type Permission } from '@erp/shared';
 import { Membership, User } from '../modules/users/user.models';
 import { Role } from '../modules/roles/role.models';
 import { Session } from '../modules/auth/auth.models';
@@ -41,14 +41,15 @@ export async function tenant(req: Request, _res: Response, next: NextFunction) {
   const userId = new Types.ObjectId(req.auth.userId);
   const membership = await Membership.findOne({ companyId, userId, status: 'active' }).lean();
   if (!membership) throw forbidden('You are not an active member of this company');
-  const role = await Role.findOne({ companyId, _id: membership.roleId }).select('permissions').lean();
+  const role = await Role.findOne({ companyId, _id: membership.roleId }).select('permissions systemKey').lean();
   if (!role) throw forbidden('Your role no longer exists');
 
   req.ctx = {
     userId,
     companyId,
     roleId: role._id,
-    permissions: new Set(role.permissions),
+    // The owner role always carries the full, current catalog (including newly added permissions).
+    permissions: new Set(role.systemKey === 'owner' ? ALL_PERMISSIONS : role.permissions),
     projectScope: membership.projectAccess?.mode === 'restricted' ? (membership.projectAccess.projectIds ?? []) : null,
     meta: { ip: req.ip, userAgent: req.get('user-agent'), requestId: String(req.id) },
   };

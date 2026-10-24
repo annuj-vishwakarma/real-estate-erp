@@ -32,6 +32,7 @@ import { EmptyState, ErrorState, PageSkeleton } from '@/components/states';
 import { SearchInput } from '@/components/search-input';
 import { MoneyInput, paiseToInput, rupeeField, toPaise } from '@/components/money';
 import { Skeleton } from '@/components/ui/primitives';
+import { DocumentsPanel } from '@/components/documents-panel';
 
 export interface Project {
   id: string;
@@ -588,6 +589,7 @@ export function ProjectDetailPage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="structure">Phases & blocks</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
         </TabsList>
         <TabsContent value="overview">
           <Card>
@@ -611,6 +613,9 @@ export function ProjectDetailPage() {
         </TabsContent>
         <TabsContent value="structure">
           <PhasesAndBlocks project={p} />
+        </TabsContent>
+        <TabsContent value="documents">
+          <DocumentsPanel entityType="project" entityId={p.id} title="Approvals, layout plans & project documents" />
         </TabsContent>
       </Tabs>
       <ProjectFormSheet open={editing} onOpenChange={setEditing} project={p} />

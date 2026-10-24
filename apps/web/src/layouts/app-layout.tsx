@@ -3,6 +3,12 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
+  Handshake,
+  HardHat,
+  MapPinned,
+  Receipt,
+  Target,
+  Truck,
   BookOpenCheck,
   Building2,
   CalendarClock,
@@ -64,15 +70,26 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { to: '/projects', label: 'Projects', icon: FolderKanban, permission: 'projects.read' },
       { to: '/inventory', label: 'Plot inventory', icon: Grid3x3, permission: 'inventory.read' },
       { to: '/map', label: 'Plot map', icon: Map, permission: 'map.read' },
+      { to: '/land', label: 'Land acquisition', icon: MapPinned, permission: 'land.read' },
     ],
   },
   {
     section: 'Sales',
     items: [
+      { to: '/crm', label: 'Leads', icon: Target, permission: 'crm.read' },
       { to: '/customers', label: 'Customers', icon: Users, permission: 'customers.read' },
       { to: '/bookings', label: 'Bookings', icon: BookOpenCheck, permission: 'bookings.read' },
       { to: '/payment-plans', label: 'Payment plans', icon: CalendarClock, permission: 'paymentPlans.read' },
       { to: '/payments', label: 'Receipts & refunds', icon: ReceiptIndianRupee, permission: 'payments.read' },
+      { to: '/brokers', label: 'Brokers', icon: Handshake, permission: 'brokers.read' },
+    ],
+  },
+  {
+    section: 'Construction',
+    items: [
+      { to: '/work-orders', label: 'Work orders', icon: HardHat, permission: 'construction.read' },
+      { to: '/vendors', label: 'Vendors', icon: Truck, permission: 'vendors.read' },
+      { to: '/expenses', label: 'Expenses & bills', icon: Receipt, permission: 'expenses.read' },
     ],
   },
   {
@@ -162,6 +179,9 @@ interface SearchResults {
   plots: { id: string; plotNumber: string; projectId: string; status: string }[];
   customers: { id: string; name: string; phone: string; customerCode: string }[];
   bookings: { id: string; bookingNumber: string; status: string }[];
+  leads?: { id: string; name: string; phone: string; status: string }[];
+  vendors?: { id: string; name: string; category: string }[];
+  land?: { id: string; khasraNumber: string; village: string; status: string }[];
 }
 
 function GlobalSearch() {
@@ -212,6 +232,23 @@ function GlobalSearch() {
           })),
         },
         { label: 'Projects', items: data.projects.map((p) => ({ key: p.id, title: p.name, sub: p.code, to: `/projects/${p.id}` })) },
+        {
+          label: 'Leads',
+          items: (data.leads ?? []).map((l) => ({ key: l.id, title: l.name, sub: `${l.phone} · ${l.status}`, to: `/crm?lead=${l.id}` })),
+        },
+        {
+          label: 'Vendors',
+          items: (data.vendors ?? []).map((v) => ({ key: v.id, title: v.name, sub: v.category, to: `/vendors/${v.id}` })),
+        },
+        {
+          label: 'Land',
+          items: (data.land ?? []).map((l) => ({
+            key: l.id,
+            title: `Khasra ${l.khasraNumber}`,
+            sub: `${l.village} · ${l.status}`,
+            to: `/land/${l.id}`,
+          })),
+        },
       ].filter((g) => g.items.length)
     : [];
 

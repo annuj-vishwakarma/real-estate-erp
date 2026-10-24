@@ -32,6 +32,8 @@ const lineSchema = new Schema(
     /** Party tagging lets customer ledgers be derived straight from the books. */
     customerId: { type: Schema.Types.ObjectId, ref: 'Customer' },
     bookingId: { type: Schema.Types.ObjectId, ref: 'Booking' },
+    vendorId: { type: Schema.Types.ObjectId, ref: 'Vendor' },
+    brokerId: { type: Schema.Types.ObjectId, ref: 'Broker' },
   },
   { _id: false },
 );
@@ -66,6 +68,8 @@ journalSchema.index({ companyId: 1, entryNumber: 1 }, { unique: true });
 journalSchema.index({ companyId: 1, date: -1 });
 journalSchema.index({ companyId: 1, 'lines.accountId': 1, date: 1 });
 journalSchema.index({ companyId: 1, 'lines.customerId': 1, date: 1 });
+journalSchema.index({ companyId: 1, 'lines.vendorId': 1, date: 1 }, { sparse: true });
+journalSchema.index({ companyId: 1, 'lines.brokerId': 1, date: 1 }, { sparse: true });
 journalSchema.index({ companyId: 1, 'source.type': 1, 'source.id': 1 });
 
 // Posted entries are immutable: only the one-time reversal link may be written.

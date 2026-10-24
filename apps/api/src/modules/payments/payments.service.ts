@@ -16,7 +16,7 @@ import { badRequest, businessRule, notFound } from '../../utils/errors';
 import { escapeRegex, pageMeta, parseSort } from '../../utils/http';
 import { assertProjectAccess, scopedFilter, toObjectId, type TenantContext } from '../../utils/tenant';
 import { Account } from '../accounting/accounting.models';
-import { postJournal, reverseJournal, systemAccountId } from '../accounting/ledger.service';
+import { postJournal, resolveCashAccountFor, reverseJournal } from '../accounting/ledger.service';
 import { Booking, Installment } from '../bookings/booking.models';
 import { Company } from '../companies/company.model';
 import { Customer } from '../customers/customer.models';
@@ -27,19 +27,8 @@ function installmentStatus(amount: number, paid: number): InstallmentStatus {
   return paid > 0 ? 'partial' : 'pending';
 }
 
-/** Deposit/withdrawal account: an explicit active asset account, or cash/bank by payment mode. */
-async function resolveCashAccount(ctx: TenantContext, accountId: string | undefined, mode: PaymentMode, session: ClientSession) {
-  if (accountId) {
-    const acc = await Account.findOne({ companyId: ctx.companyId, _id: toObjectId(accountId), type: 'asset', isActive: true })
-      .session(session)
-      .lean();
-    if (!acc || (acc.systemKey && acc.systemKey !== 'cash' && acc.systemKey !== 'bank' && !acc.isBank)) {
-      throw badRequest('Choose an active cash or bank account');
-    }
-    if (acc.systemKey === 'customer_receivable') throw badRequest('Choose a cash or bank account');
-    return acc._id;
-  }
-  return systemAccountId(ctx.companyId, mode === 'cash' ? 'cash' : 'bank', session);
+function resolveCashAccount(ctx: TenantContext, accountId: string | undefined, mode: PaymentMode, session: ClientSession) {
+  return resolveCashAccountFor(ctx.companyId, accountId, mode, session);
 }
 
 /**

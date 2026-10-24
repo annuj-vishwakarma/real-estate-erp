@@ -1,5 +1,5 @@
 import { model, Schema } from 'mongoose';
-import { LEAD_STATUSES } from '@erp/shared';
+import { LEAD_SOURCES, LEAD_STATUSES } from '@erp/shared';
 import { baseOptions, tenantRef, withTenant } from '../../db/base';
 
 /** CRM lead (Phase 2 module). */
@@ -11,11 +11,7 @@ const leadSchema = withTenant(
       name: { type: String, required: true, trim: true },
       phone: { type: String, required: true },
       email: String,
-      source: {
-        type: String,
-        enum: ['walk_in', 'website', 'facebook', 'google', 'broker', 'referral', 'hoarding', 'other'],
-        default: 'other',
-      },
+      source: { type: String, enum: LEAD_SOURCES, default: 'other' },
       brokerId: { type: Schema.Types.ObjectId, ref: 'Broker' },
       status: { type: String, enum: LEAD_STATUSES, default: 'new', required: true },
       budgetMinPaise: Number,
@@ -25,6 +21,11 @@ const leadSchema = withTenant(
       nextFollowUpAt: Date,
       lostReason: String,
       customerId: { type: Schema.Types.ObjectId, ref: 'Customer' },
+      convertedAt: Date,
+      notes: String,
+      lastActivityAt: Date,
+      lastReminderOn: Date,
+      createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
       deletedAt: Date,
     },
     baseOptions,
@@ -33,6 +34,8 @@ const leadSchema = withTenant(
 leadSchema.index({ companyId: 1, status: 1, nextFollowUpAt: 1 });
 leadSchema.index({ companyId: 1, assignedTo: 1, status: 1 });
 leadSchema.index({ companyId: 1, phone: 1 });
+leadSchema.index({ companyId: 1, projectId: 1, status: 1, createdAt: -1 });
+leadSchema.index({ status: 1, nextFollowUpAt: 1 });
 export const Lead = model('Lead', leadSchema);
 
 const leadActivitySchema = withTenant(

@@ -25,6 +25,7 @@ import { getCtx } from '../utils/tenant';
 import { AuditLog } from './audit/audit.model';
 import * as companies from './companies/company.service';
 import { Notification } from './notifications/notification.model';
+import { Membership } from './users/user.models';
 import * as roles from './roles/roles.service';
 import * as users from './users/users.service';
 
@@ -51,6 +52,20 @@ adminRouter.post('/invitations', authorize('users.create'), validate({ body: inv
 adminRouter.delete('/invitations/:id', authorize('users.create'), validate({ params: idParam }), async (req, res) => {
   await users.revokeInvitation(getCtx(req), params<{ id: string }>(req).id);
   ok(res, { revoked: true });
+});
+
+// Minimal member directory (names only) for pickers such as lead assignment.
+adminRouter.get('/members', async (req, res) => {
+  const ctx = getCtx(req);
+  const members = await Membership.find({ companyId: ctx.companyId, status: 'active' }).populate('userId', 'name').lean();
+  ok(
+    res,
+    members
+      .map((m) => m.userId as unknown as { _id: unknown; name: string } | null)
+      .filter(Boolean)
+      .map((u) => ({ id: String(u!._id), name: u!.name }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  );
 });
 
 // Roles & permissions

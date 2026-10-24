@@ -7,7 +7,8 @@ Browser (React SPA) ──/api/v1──▶ Express API ──▶ MongoDB replica
    │  access token in memory           │  routes → controllers (thin) → services → models
    │  refresh token: HttpOnly cookie   │  middleware: requestId, helmet, CORS, rate limit,
    │  TanStack Query cache             │  authenticate, tenant, authorize, validate, idempotency
-                                       └─ jobs: reservation expiry, installment reminders (node-cron)
+                                       ├─ jobs: reservation expiry, installment + follow-up reminders (node-cron)
+                                       └─ storage driver: local disk (signed links) | S3 (presigned)
 ```
 
 - **packages/shared** is imported by both apps and holds the Zod request schemas, the permission catalog, the status state machines, the money and date helpers and the payment-schedule generator. The server validates every request with the same schemas the forms use. The client only uses them to improve the user experience.
@@ -42,6 +43,7 @@ Every tenant-owned collection has `companyId`. Project data also has `projectId`
 | plotstatushistories | plotId, from, to, reason, bookingId, actorId | append-only |
 | customers | customerCode, name, phone, PAN, Aadhaar **last 4 only**, coApplicants[] | (companyId,customerCode) unique |
 | brokers | phone, commissionBp | (companyId,phone) unique |
+| brokercommissions | brokerId, bookingId, projectId, basePaise, rateBp, amountPaise, status (accrued/paid/cancelled), accrual/cancel journal entry IDs, payout {number, paidOn, mode, journalEntryId} | (companyId,bookingId) unique; (companyId,brokerId,status) |
 | paymentplans | rules[] (validated by Zod) | (companyId,name) unique |
 | bookings | bookingNumber, status, amounts, running totals, planSnapshot, salesJournalEntryId | (companyId,bookingNumber) unique |
 | bookingitems | bookingId, plotId, price snapshot, `active` | **partial unique (plotId) where active=true** |
@@ -49,12 +51,20 @@ Every tenant-owned collection has `companyId`. Project data also has `projectId`
 | payments | kind (receipt/refund), number, amount, allocated/advance split, status, journalEntryId, reversal | (companyId,number) unique |
 | paymentallocations | paymentId, installmentId, amount, reversedAt | |
 | accounts | code, type, systemKey | (companyId,code) unique; (companyId,systemKey) unique |
-| journalentries | entryNumber, voucherType, date, lines[{accountId, debit, credit, customerId, bookingId}], source, reversalOf/reversedBy | (companyId,entryNumber) unique; lines.accountId; lines.customerId |
+| journalentries | entryNumber, voucherType, date, lines[{accountId, debit, credit, customerId, bookingId, vendorId, brokerId}], source, reversalOf/reversedBy | (companyId,entryNumber) unique; lines.accountId; lines.customerId; lines.vendorId; lines.brokerId (sparse) |
 | notifications | userId, type, link, readAt, dedupeKey | (userId,dedupeKey) unique; TTL 180 days |
 | auditlogs | actorId, action, entity, changes, ip, requestId | immutable (update/delete hooks throw) |
 | counters | (companyId,key) → seq | unique |
 | idempotencykeys | (companyId,userId,key), request hash, stored response | unique, TTL 24h |
-| landparcels, leads, leadactivities, vendors, workorders, expenses, documents | Phase 2 models | see source |
+| landparcels | khasraNumber, khataNumber, village/tehsil/district/state, areaX100 + unit, owners[], agreedCostPaise, paidPaise, status, statusHistory[], projectId? | (companyId,district,village,khasraNumber) partial unique among non-deleted parcels |
+| landpayments | landParcelId, amountPaise, date, mode, payee, number (`LPV/…`), journalEntryId | (companyId,number) unique |
+| leads | name, phone, source, status, projectId?, assignedTo, nextFollowUpAt, lastReminderOn, lostReason, customerId, convertedAt | (companyId,status,nextFollowUpAt); (companyId,assignedTo,status); (companyId,phone) |
+| leadactivities | leadId, type, summary, actorId | (companyId,leadId,createdAt) |
+| vendors | name, category, GSTIN, PAN, contact | (companyId,name) unique, case-insensitive |
+| workorders | number (`WO/…`), projectId, vendorId, amountPaise, billedPaise, status, milestones[{name, percentBp, dueDate, completedAt}] | (companyId,number) unique; (companyId,projectId,status) |
+| expenses | number (`EXP/…`), settlement (paid/payable), projectId, accountId, vendorId?, workOrderId?, amountPaise, status, journalEntryId, reversal | (companyId,number) unique; (companyId,projectId,date) |
+| vendorpayments | number (`VPV/…`), vendorId, amountPaise, date, mode, journalEntryId | (companyId,number) unique |
+| documents | entityType, entityId, category, fileName, mimeType, sizeBytes, storageKey (`select:false`), checksumSha256, uploadedBy, deletedAt | (companyId,entityType,entityId,createdAt) |
 
 ## Money, areas and dates
 
@@ -106,16 +116,36 @@ Each company starts with a system chart of accounts. Services look accounts up b
 | Receipt | Dr Cash/Bank · Cr Customer Receivables (allocated) · Cr Customer Advances (excess) |
 | Cancellation | Reverse the sales entry, then Dr Receivables (allocated) + Dr Advances · Cr Refunds Payable · Cr Cancellation Charges |
 | Refund | Dr Refunds Payable · Cr Cash/Bank |
-| Manual voucher | Any balanced lines, **except control accounts** (receivables, advances, refunds payable) |
+| Broker commission (on confirmation) | Dr Brokerage · Cr Broker Payables (tagged `brokerId`); reversed if the booking is cancelled before payout |
+| Broker payout | Dr Broker Payables · Cr Cash/Bank |
+| Land payment | Dr Land & Development (WIP) · Cr Cash/Bank |
+| Vendor bill (payable) | Dr expense / WIP account · Cr Vendor Payables (tagged `vendorId`) |
+| Expense (paid now) | Dr expense / WIP account · Cr Cash/Bank |
+| Vendor payment | Dr Vendor Payables · Cr Cash/Bank |
+| Bill / expense reversal | Mirror entry linked through `reversalOf` |
+| Manual voucher | Any balanced lines, **except control accounts** (customer receivables, customer advances, refunds payable, vendor payables, broker payables) |
 
 - `postJournal` validates the balance (debit = credit > 0, one side per line), confirms the accounts belong to the company and are active, and numbers the voucher per financial year.
 - Posted entries are **immutable**. Mongoose hooks reject updates and deletes, except the one-time `reversedBy` link. A correction is a reversal entry. A reversal cannot be reversed. System entries can only be corrected through their source workflow.
-- Customer receivable, advance and refund lines carry `customerId` and `bookingId`, so the **customer ledger is derived straight from the books** and cannot drift.
+- Customer receivable, advance and refund lines carry `customerId` and `bookingId`, so the **customer ledger is derived straight from the books** and cannot drift. Vendor and broker payable lines carry `vendorId` / `brokerId` in the same way, so payable balances (`partyBalance`) come from the journal, and payment caps are checked against them inside the transaction.
+- System accounts added in later releases (e.g. Broker Payables) are created on first use for companies registered earlier.
+- Operational vouchers are numbered per financial year with their own series: `LPV` (land payments), `EXP` (expenses and bills), `VPV` (vendor payments), `BPV` (broker payouts), `WO` (work orders).
 - The trial balance, P&L, balance sheet and account ledgers are aggregation pipelines over posted entries. The tests assert that the books balance after every workflow.
 
 ## Idempotency
 
-Sensitive POSTs (bookings, payments, refunds) require an `Idempotency-Key`. The first request claims the key through a unique index and stores its final response. A retry with the same body replays that response (`idempotent-replayed: true`). A different body gets `422`. A retry while the first request is still running gets `409`. Failed requests release the key. The web client creates one key per dialog or form session, so double-clicks and network retries are safe.
+Sensitive POSTs (bookings, payments, refunds, land payments, expenses, vendor payments, broker payouts) require an `Idempotency-Key`. The first request claims the key through a unique index and stores its final response. A retry with the same body replays that response (`idempotent-replayed: true`). A different body gets `422`. A retry while the first request is still running gets `409`. Failed requests release the key. The web client creates one key per dialog or form session, so double-clicks and network retries are safe.
+
+## Documents
+
+```
+upload:   browser ──multipart──▶ POST /documents ── checks access to the record, type allow-list,
+                                                    size, magic bytes ──▶ storage.put(key) + metadata row
+view:     browser ──▶ GET /documents/:id/url ── re-checks access, audits ──▶ { url (≤5 min) }
+          local driver: /api/v1/files/<HMAC token>   ·   s3 driver: presigned GET
+```
+
+Access to a document follows access to its record: project-scoped users only see files on records in their projects, and a lead's files follow lead visibility. Keys are `companyId/entityType/entityId/<uuid>.<ext>`, so a bucket listing never reveals filenames.
 
 ## Frontend
 

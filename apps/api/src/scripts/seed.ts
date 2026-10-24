@@ -25,6 +25,11 @@ import * as plans from '../modules/bookings/payment-plans.service';
 import * as customers from '../modules/customers/customers.service';
 import * as bookings from '../modules/bookings/bookings.service';
 import * as payments from '../modules/payments/payments.service';
+import * as land from '../modules/land/land.service';
+import * as crm from '../modules/crm/crm.service';
+import * as brokers from '../modules/brokers/brokers.service';
+import * as construction from '../modules/construction/construction.service';
+import { Account } from '../modules/accounting/accounting.models';
 import type { TenantContext } from '../utils/tenant';
 
 /** Service results are toJSON()-ed documents (with `id`), lean ones have `_id`. */
@@ -224,6 +229,148 @@ async function main() {
       });
     }
   }
+  // ---------- Phase 2: brokers, land, CRM, construction ----------
+  const broker = await brokers.createBroker(ctx, { name: 'Vikas Realty', phone: '+91 91111 22222', firmName: 'Vikas Realty & Associates', commissionBp: 150, isActive: true });
+  const brokered = await bookings.createBooking(ctx, {
+    projectId,
+    customerId: idOf(custs[2]),
+    plotIds: [created[13]!.id],
+    paymentPlanId: idOf(standard),
+    brokerId: idOf(broker),
+    bookingDate: addDays(today, -20),
+    mode: 'book',
+    discountPaise: 0,
+    charges: [],
+  });
+  const firstInst = (await bookings.getBooking(ctx, idOf(brokered))).installments[0]!;
+  await payments.recordPayment(ctx, { bookingId: idOf(brokered), amountPaise: firstInst.amountPaise, mode: 'neft', receivedOn: addDays(today, -19) });
+
+  const parcelA = await land.createParcel(ctx, {
+    projectId,
+    khasraNumber: '214/2',
+    khataNumber: '88',
+    village: 'Kolua Kalan',
+    tehsil: 'Huzur',
+    district: 'Bhopal',
+    state: 'Madhya Pradesh',
+    areaX100: 520,
+    areaUnit: 'acre',
+    owners: [
+      { name: 'Ram Prasad Patel', sharePercentBp: 6_000 },
+      { name: 'Shyam Lal Patel', sharePercentBp: 4_000 },
+    ],
+    agreedCostPaise: 3_20_00_000_00,
+    mutationDone: true,
+  });
+  await land.changeStatus(ctx, idOf(parcelA), 'agreement', addMonths(today, -14), 'Agreement to sell signed');
+  await land.recordLandPayment(ctx, idOf(parcelA), { amountPaise: 1_20_00_000_00, paidOn: addMonths(today, -14), mode: 'rtgs', payee: 'Ram Prasad Patel' });
+  await land.changeStatus(ctx, idOf(parcelA), 'registered', addMonths(today, -12), 'Sale deed registered');
+  await land.recordLandPayment(ctx, idOf(parcelA), { amountPaise: 1_60_00_000_00, paidOn: addMonths(today, -12), mode: 'rtgs', payee: 'Shyam Lal Patel' });
+  await land.changeStatus(ctx, idOf(parcelA), 'converted', addMonths(today, -10), 'Diversion order received');
+  const parcelB = await land.createParcel(ctx, {
+    khasraNumber: '57/1',
+    village: 'Bilkhiriya',
+    district: 'Bhopal',
+    state: 'Madhya Pradesh',
+    areaX100: 310,
+    areaUnit: 'acre',
+    owners: [{ name: 'Kamla Bai', sharePercentBp: 10_000 }],
+    agreedCostPaise: 1_85_00_000_00,
+    mutationDone: false,
+    notes: 'Expansion land for phase 2; title search in progress.',
+  });
+  await land.changeStatus(ctx, idOf(parcelB), 'agreement', addDays(today, -25), 'Token agreement');
+  await land.recordLandPayment(ctx, idOf(parcelB), { amountPaise: 11_00_000_00, paidOn: addDays(today, -25), mode: 'cheque', payee: 'Kamla Bai', reference: '004512' });
+  await land.createParcel(ctx, { khasraNumber: '102', village: 'Ratibad', district: 'Bhopal', state: 'Madhya Pradesh', areaX100: 450, areaUnit: 'acre', owners: [{ name: 'Gopal Singh' }], mutationDone: false });
+
+  const leadSeeds = [
+    { name: 'Neha Jain', phone: '+91 90000 11111', source: 'facebook', status: 'site_visit', fu: -1 },
+    { name: 'Amit Tiwari', phone: '+91 90000 22222', source: 'google', status: 'negotiation', fu: 1 },
+    { name: 'Farhan Ali', phone: '+91 90000 33333', source: 'broker', status: 'contacted', fu: 0 },
+    { name: 'Kavita Rao', phone: '+91 90000 44444', source: 'walk_in', status: 'new', fu: 2 },
+    { name: 'Deepak Soni', phone: '+91 90000 55555', source: 'hoarding', status: 'new', fu: null },
+    { name: 'Ritu Malhotra', phone: '+91 90000 66666', source: 'referral', status: 'lost', fu: null },
+  ] as const;
+  for (const l of leadSeeds) {
+    const lead = await crm.createLead(ctx, {
+      projectId,
+      name: l.name,
+      phone: l.phone,
+      source: l.source,
+      assignedTo: String(admin._id),
+      interestedPlotIds: [],
+      brokerId: l.source === 'broker' ? idOf(broker) : undefined,
+      budgetMinPaise: 25_00_000_00,
+      budgetMaxPaise: 40_00_000_00,
+    });
+    if (l.status !== 'new') await crm.addActivity(ctx, idOf(lead), { type: 'call', summary: 'Shared price list and layout plan' });
+    if (l.status === 'site_visit' || l.status === 'negotiation') await crm.addActivity(ctx, idOf(lead), { type: 'site_visit', summary: 'Visited site with family; liked park-facing plots' });
+    if (l.status === 'negotiation') await crm.changeLeadStatus(ctx, idOf(lead), 'negotiation');
+    if (l.status === 'lost') await crm.changeLeadStatus(ctx, idOf(lead), 'lost', 'Bought a flat instead');
+    if (l.fu !== null) {
+      const at = new Date(Date.now() + l.fu * 86_400_000);
+      at.setUTCHours(5, 30, 0, 0); // 11:00 IST
+      await crm.addActivity(ctx, idOf(lead), { type: 'note', summary: 'Follow-up scheduled', nextFollowUpAt: at.toISOString() });
+    }
+  }
+  const wonLead = await crm.createLead(ctx, { projectId, name: 'Sunita Patel', phone: '+91 97520 44444', source: 'walk_in', interestedPlotIds: [] });
+  await crm.convertLead(ctx, idOf(wonLead));
+
+  const roads = await construction.createVendor(ctx, { name: 'Shree Ganesh Road Builders', category: 'road', phone: '+91 98260 77777', gstin: '23ABCDE1234F1Z5', isActive: true });
+  const electric = await construction.createVendor(ctx, { name: 'Malwa Electricals', category: 'electrical', phone: '+91 98930 88888', isActive: true });
+  const devAccount = await Account.findOne({ companyId: company._id, systemKey: 'development_expense' }).lean();
+  const woRoads = await construction.createWorkOrder(ctx, {
+    projectId,
+    vendorId: idOf(roads),
+    title: 'Internal roads – phase 1',
+    scope: '9 m wide WBM + bituminous internal roads, 1.8 km, with kerb stones.',
+    amountPaise: 85_00_000_00,
+    startDate: addMonths(today, -6),
+    endDate: addMonths(today, 2),
+    milestones: [
+      { name: 'Earthwork & sub-grade', percentBp: 2_000 },
+      { name: 'WBM layers', percentBp: 4_000 },
+      { name: 'Bituminous carpet', percentBp: 3_000 },
+      { name: 'Kerbs & finishing', percentBp: 1_000 },
+    ],
+  });
+  await construction.changeWorkOrderStatus(ctx, idOf(woRoads), 'issued');
+  await construction.changeWorkOrderStatus(ctx, idOf(woRoads), 'in_progress');
+  const woFresh = await construction.getWorkOrder(ctx, idOf(woRoads));
+  await construction.setMilestone(ctx, idOf(woRoads), String(woFresh.milestones[0]!._id), true, addMonths(today, -4));
+  await construction.setMilestone(ctx, idOf(woRoads), String(woFresh.milestones[1]!._id), true, addMonths(today, -1));
+  for (const [i, amt] of [17_00_000_00, 34_00_000_00].entries()) {
+    await construction.createExpense(ctx, {
+      projectId,
+      vendorId: idOf(roads),
+      workOrderId: idOf(woRoads),
+      expenseAccountId: String(devAccount!._id),
+      date: addMonths(today, i === 0 ? -4 : -1),
+      amountPaise: amt,
+      description: `RA bill ${i + 1} – internal roads`,
+      billNumber: `SGRB/${i + 41}`,
+      settlement: 'payable',
+    });
+  }
+  await construction.payVendor(ctx, idOf(roads), { amountPaise: 17_00_000_00, paidOn: addMonths(today, -3), mode: 'rtgs', projectId, reference: 'UTR4431' });
+  const woPower = await construction.createWorkOrder(ctx, {
+    projectId,
+    vendorId: idOf(electric),
+    title: 'Street lighting & transformer',
+    amountPaise: 22_00_000_00,
+    milestones: [{ name: 'Transformer installation' }, { name: 'Street poles & fittings' }],
+  });
+  await construction.changeWorkOrderStatus(ctx, idOf(woPower), 'issued');
+  await construction.createExpense(ctx, {
+    projectId,
+    expenseAccountId: String(devAccount!._id),
+    date: addDays(today, -5),
+    amountPaise: 1_85_000_00,
+    description: 'Site security – October',
+    settlement: 'paid',
+    mode: 'upi',
+  });
+
   await plots.changePlotStatus(ctx, projectId, created[0]!.id, 'sold', 'Registry completed');
   await plots.changePlotStatus(ctx, projectId, created[47]!.id, 'blocked', 'Reserved for management quota');
 

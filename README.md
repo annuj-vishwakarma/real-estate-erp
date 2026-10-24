@@ -1,6 +1,6 @@
 # Plotline — Real Estate Colony Management ERP
 
-A multi-tenant ERP for Indian colonizers, plotted-development builders and real estate developers. It covers projects and plot inventory, interactive layout maps, customers, bookings, installment schedules, receipts, refunds and double-entry accounting.
+A multi-tenant ERP for Indian colonizers, plotted-development builders and real estate developers. It covers land acquisition, projects and plot inventory, interactive layout maps, a lead pipeline, customers, bookings, installment schedules, receipts, refunds, broker commissions, development works and vendor bills, document storage and double-entry accounting.
 
 The workflows are modelled on the kind of features colony-management software is publicly advertised with. The code, design and branding are original.
 
@@ -8,7 +8,7 @@ The workflows are modelled on the kind of features colony-management software is
 
 ---
 
-## Status: Phase 1 (core) is complete
+## Status: Phases 1 and 2 are complete
 
 | Area | Status |
 | --- | --- |
@@ -25,7 +25,12 @@ The workflows are modelled on the kind of features colony-management software is
 | Dashboard KPIs and charts, computed from the database | ✅ |
 | Notifications: installment reminder job and in-app bell | ✅ |
 | Global search, server-side pagination, sorting and filtering | ✅ |
-| Land acquisition, CRM pipeline, construction/vendors/work orders/expenses, document storage | ⏳ Phase 2. The data models exist; see [docs/roadmap.md](docs/roadmap.md) |
+| **Phase 2:** Land acquisition: parcels (khasra/khata, owners), negotiation → agreement → registry → conversion, payments to owners posted to Land & Development | ✅ |
+| **Phase 2:** CRM: lead board and list, follow-ups with reminder job, assignment, activity timeline, lost reasons, lead → customer conversion | ✅ |
+| **Phase 2:** Broker commissions accrued on booking confirmation, cancelled with the booking, settled by payouts | ✅ |
+| **Phase 2:** Construction: vendors with payable ledgers, work orders with milestones, vendor bills (never above the order), vendor payments, expenses, project cost summary | ✅ |
+| **Phase 2:** Documents: private storage (local disk or S3), type/size/magic-byte validation, short-lived signed view/download links, attachments on projects, parcels, customers, bookings, leads, vendors and work orders | ✅ |
+| Phase 3 enhancements | ⏳ See [docs/roadmap.md](docs/roadmap.md) |
 
 ## Quick start
 
@@ -39,7 +44,7 @@ cp .env.example .env                 # then set JWT_ACCESS_SECRET
 docker compose up -d mongo           # Docker
 npm run db:local                     # or a local mongod binary (MONGOD_BIN=/path/to/mongod)
 
-npm run seed -- --reset              # demo company, project, 48 mapped plots, bookings and receipts
+npm run seed -- --reset              # demo company, project, 48 mapped plots, bookings, receipts, leads, land, works
 npm run dev                          # API on :4000, web on :5173 (Vite proxies /api)
 ```
 
@@ -84,22 +89,22 @@ apps/
       db/          tenant guard plugin, transactions, counters, idempotency store
       middleware/  auth, tenant context, authorize, validate, idempotency, CSRF, rate limit, errors
       modules/     auth, companies, users, roles, projects, plots, customers, bookings,
-                   payments, accounting, reports, land*, crm*, construction*, documents*, notifications, audit
-      jobs/        reservation expiry, installment reminders
+                   payments, accounting, reports, land, crm, brokers, construction, documents, notifications, audit
+      jobs/        reservation expiry, installment reminders, lead follow-up reminders
       scripts/     seed
     test/          Supertest integration tests
   web/             React SPA
     src/
       app/         router (lazy routes, guards)
       components/  ui primitives (shadcn-style), data table, states, forms
-      features/    auth, dashboard, projects, inventory, map, customers, bookings, payments, accounting, admin
+      features/    auth, dashboard, projects, inventory, map, land, crm, customers, bookings, brokers,
+                   payments, construction, accounting, admin
       hooks/ lib/ layouts/
 packages/
   shared/          Zod schemas, permission catalog, status machines, money/date utils, schedule generator
 docs/              architecture, API, security, deployment, roadmap
 deploy/            nginx config
 ```
-\* model only in Phase 1.
 
 The tests sit next to the code they cover, in `apps/api/test`, `apps/web/src/**/*.test.tsx` and `packages/shared/src/*.test.ts`, rather than in a top-level `tests/` folder. That way each workspace runs independently.
 
