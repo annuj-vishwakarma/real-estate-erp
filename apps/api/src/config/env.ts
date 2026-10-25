@@ -5,14 +5,14 @@ const bool = z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' |
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(4000),
-  MONGODB_URI: z.string().min(1).default('mongodb://127.0.0.1:27017/real_estate_erp?replicaSet=rs0'),
-  JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
+  MONGODB_URI: z.string().min(1).default('mongodb+srv://anuj123:Anuj%40123@cluster0.6mple3q.mongodb.net/real_estate_erp?retryWrites=true&w=majority'),
+  JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters').default('pmBCZ7lwxi88X_Ffne4CY4UIq09hUS16FDmaxyMI8HpSUI6F_6SVEBQtqfv0o1TB'),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(14),
   /** Comma-separated list of allowed browser origins. */
-  CORS_ORIGINS: z.string().default('http://localhost:5173'),
+  CORS_ORIGINS: z.string().default('http://localhost:5173,https://real-estate-erp-kappa.vercel.app'),
   /** Public URL of the web app, used in email links. */
-  APP_URL: z.string().url().default('http://localhost:5173'),
+  APP_URL: z.string().url().default('https://real-estate-erp-kappa.vercel.app'),
   COOKIE_SECURE: bool.optional(),
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
