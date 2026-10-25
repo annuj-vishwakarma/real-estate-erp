@@ -4,6 +4,10 @@
   "outputDirectory": "apps/web/dist",
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
