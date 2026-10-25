@@ -2,6 +2,7 @@
   "name": "real-estate-erp",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "description": "Real estate colony management ERP (MERN + TypeScript)",
   "workspaces": [
     "packages/shared",
